@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: employee-scheduler-db
+    environment:
+      POSTGRES_DB: employee_scheduler
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    networks:
+      - employee-scheduler-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: EmployeeScheduler.Api/Dockerfile
+    container_name: employee-scheduler-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=postgres;Database=employee_scheduler;User Id=postgres;Password=yourpassword;
+      - JWT_SECRET=your-secret-key-here-make-it-long-and-secure-for-production
+      - JWT_EXPIRY_MINUTES=60
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=your-email@gmail.com
+      - SMTP_PASSWORD=your-app-password
+      - FRONTEND_URL=http://localhost:3000
+    ports:
+      - "5000:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - employee-scheduler-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./src/frontend/employee-scheduler-web
+      dockerfile: Dockerfile
+    container_name: employee-scheduler-web
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - employee-scheduler-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  employee-scheduler-network:
+    driver: bridge
